@@ -1,6 +1,5 @@
 from aiogram import Bot, Dispatcher, F, types
 from aiogram.filters import Command
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
@@ -29,6 +28,7 @@ connect.commit()
 
 class Registration(StatesGroup):
     full_name = State()
+    balance=State()
 
 class TransferState(StatesGroup):
     amount = State()
@@ -36,7 +36,7 @@ class TransferState(StatesGroup):
 
 def register_user(user_id, username, full_name):
     cursor.execute("""
-    INSERT OR IGNORE INTO users (user_id, username, full_name) VALUES (?, ?, ?)
+    INSERT OR IGNORE INTO users (user_id, username, full_name, balance) VALUES (?, ?, ?, ?)
     """, (user_id, username, full_name))
     connect.commit()
 
@@ -50,15 +50,12 @@ async def cmd_start(message: types.Message, state: FSMContext):
     if is_registered(user_id):
         await message.answer("Вы уже зарегистрированы! Используйте команды /balance или /transfer.")
     else:
-        await message.answer("Добро пожаловать! Пожалуйста, введите ваше полное имя:")
+        await message.answer("Добро пожаловать! Пожалуйста, введите ваше полное имя (фамилию и имя!):")
         await state.set_state(Registration.full_name)
 
 @dp.message(Registration.full_name)
 async def process_full_name(message: types.Message, state: FSMContext):
-    full_name = message.text.strip()
-    if len(full_name.split()) < 2:
-        await message.answer("Пожалуйста, введите ваше полное имя (имя и фамилию).")
-        return
+    full_name = message.text
 
     user_id = message.from_user.id
     username = message.from_user.username or "Не указан"
@@ -105,7 +102,7 @@ async def cmd_transfer(message: types.Message, state: FSMContext):
 
 
 @dp.message(TransferState.amount)
-async def process_transfer_amount(message: types.Message, state: FSMContext):
+async def transfer_amount(message: types.Message, state: FSMContext):
     try:
         amount = float(message.text)
         if amount <= 0:
@@ -129,7 +126,7 @@ async def process_transfer_amount(message: types.Message, state: FSMContext):
         await message.answer("Пожалуйста, введите числовое значение суммы.")
 
 @dp.message(TransferState.recipient)
-async def process_transfer_recipient(message: types.Message, state: FSMContext):
+async def transfer_recipient(message: types.Message, state: FSMContext):
     try:
         recipient_id = int(message.text)
         user_id = message.from_user.id
@@ -159,6 +156,10 @@ async def process_transfer_recipient(message: types.Message, state: FSMContext):
 async def handle_error(update: types.Update, exception: Exception):
     logging.exception(f"Произошла ошибка: {exception}")
     return True
+
+@dp.message()
+async def echo(message: types.Message):
+    await message.answer('Я вас не понял')
 
 async def main():
         await dp.start_polling(bot)
